@@ -169,9 +169,8 @@ def main():
             try:
                 r2 = post(a.target, poc2)
             except requests.RequestException as e:
-                print("\n[ERR] target2 unreachable: %s" % e)
                 print(json.dumps(poc2))
-                break
+                pass
             mark = ""
             if r2.status_code != 500:
                 hit = (num, poc1, poc2, r2)
